@@ -1,17 +1,15 @@
 from objects_optics import OPT, oven, beam_laser, beam_atoms
+#from objects_oven import aperture, get_dimensions, ovenA, ovenB
 # % %
 import numpy as np
 import math
 import matplotlib.pyplot as plt
-from IPython.display import display, Latex
-from scipy.optimize import curve_fit
 from scipy.constants import u, convert_temperature, c, h, hbar, k, g
-
-from scipy.special import erf
-from scipy.interpolate import interp1d as interp
 # % %
 kB ,     pi =        k, np.pi
 amu, cm2_m2 = 1.66e-27, 1e4
+# lamb_b, Gamma_b, Isat_b = 421.290e-9, 2*pi*32.2e6, cm2_m2*50e-3
+# lamb_r, Gamma_r, Isat_r = 626.082e-9, 2*pi*136e3 , cm2_m2*72e-6
 #-----------------------------------------------------------------
 """ define atomic and laser beams, create oven object """
 atoms_test = beam_atoms(iso=162, T_hl=1200)
@@ -57,4 +55,3 @@ for j in range(len(Di)):
 # plt.title(title_i+"\n"+title_j, size=14)
 plt.title(title_i, size=14)
 plt.show()
-
