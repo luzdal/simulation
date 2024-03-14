@@ -1,24 +1,25 @@
+from objects_oven import aperture, get_dimensions, ovenA, ovenB
+from objects_plots import plts_0log, plts_0lin, plts_1stats, plts_2stats
+# %% 
 import numpy as np
 import math
 import matplotlib.pyplot as plt
 from IPython.display import display, Latex
 from scipy.optimize import curve_fit
-from scipy.constants import u, convert_temperature, c, h, hbar, k, g
-
+from scipy.constants import u, convert_temperature, c, h, hbar, k, atm, bar, torr, mmHg
+# %%
 from scipy.special import erf
 from scipy.interpolate import interp1d as interp
-
+# %%
 kB ,     pi =        k, np.pi
 amu, cm2_m2 = 1.66e-27, 1e4
-
+# %%
 lamb_b, Gamma_b, Isat_b = 421.290e-9, 2*pi*32.2e6, cm2_m2*50e-3
 lamb_r, Gamma_r, Isat_r = 626.082e-9, 2*pi*136e3 , cm2_m2*72e-6
-
-#############################################################################################################
-################################################### beams ###################################################
-#############################################################################################################
-
-# ********************************************************************************************************* # laser beam
+# %%
+#############################################
+################### beams ###################
+# ***************************************** # laser
 class beam_laser():
     def __init__(self, diam, powr, detun):        
         def Imax(self): return self.P / pi / self.D**2   
@@ -40,15 +41,17 @@ class beam_laser():
                     +argv[0]+")")
             
         else: return (r'(D, P, det) = (%s mm, %s mW, %s)'%(self.D*1e3, self.P*1e3, self.detun))
-    
-
-# ********************************************************************************************************* # atomic beam
+# **************************************** # atomic
 class beam_atoms():
     """returns transition wavelength, frequency, natural linewitdh, and Isat"""
     def __init__(self, iso, T_hl):
-        def mass(self): return iso*amu
-        def v_mp(self): return np.sqrt( 3 * kB * convert_temperature(T_hl, 'Celsius', 'Kelvin') / mass(self) ) 
-        self.iso, self.mass, self.v_mp, self.T_hl = iso, mass(self), v_mp(self), T_hl
+        self.iso = iso
+        if iso ==162 or iso ==164: self.elem = 'Dy'
+        #self.D_vdw = 281e-12
+        self.T_hlC, self.T_hlK = T_hl   , convert_temperature(T_hl, 'Celsius', 'Kelvin')
+        self.mass , self.beta = iso*amu,  1/kB/self.T_hlK
+        def v_mp(self): return np.sqrt( 3/self.beta/self.mass) 
+        self.v_mp = v_mp(self)
     def get_Gamma(self, res):
         if self.iso==164 or self.iso==162:
             if res == 'b': return Gamma_b
@@ -64,26 +67,24 @@ class beam_atoms():
     def get_kvec(self, res): return 2 * pi / self.get_wvlen(res)
     def get_freq(self, res): return c / self.get_wvlen(res)
     def get_sigma0(self, res): return 3 * self.get_wvlen(res)**2 / 2 / pi
-    
     def __str__(self, *argv):
         if argv:
             br, common = argv[0], " Dy-"+str(self.iso)+"//"+str(argv[0])+"-trans :"
-            
+            if br =='sos':
+                return print('  class: x = beam_atoms(iso=a, T_hl=b) ; a = 162 or 164, b = temp in C \n'
+                            +'objects:'+' x.iso, x.mass, x.v_mp, x.T_hl \n'
+                            +'methods: res = \'b\' or \'r\'\n'
+                            +'         x.get_Gamma(res); x.get_Isat(res); x.get_wvlen(res) \n'
+                            +'         x.get_kvec(res) ; x.get_freq(res); x.get_sigma0(res)\n')
+            # %%%%%%%%%%%%%%%    
             if br =='b': BR = (' Gamma = 2pi * %g MHz = %g MHz ; Isat = %g mW/cm^2'
                   %(self.get_Gamma(br)/2/pi*1e-6, self.get_Gamma(br)*1e-6, self.get_Isat(br)*1e-1))
-                
             elif br =='r': BR = (' Gamma = 2pi * %d kHz = %g kHz ; Isat = %g uW/cm^2'
                       %(self.get_Gamma(br)/2/pi*1e-3, self.get_Gamma(br)*1e-3, self.get_Isat(br)*1e2))
-
             return common + BR
-    
-
-    
-#############################################################################################################
-################################################# apparatus #################################################
-#############################################################################################################
-
-# ********************************************************************************************************* # OPT
+#############################################
+################## physics ##################
+# ***************************************** # OPT
 class OPT():
     def __init__(self, **kwargs):
         def Tdpplr(self):return hbar * self.Gamma / kB / 2      ##  Doppler temperature
@@ -111,9 +112,53 @@ class OPT():
         plt.title('Counter-propagating optical force', size=13)
         plt.xlabel(r'$v_z$ (m/s)', size=13), plt.ylabel(r'$F_z$ ($\hbar$$k$$\Gamma$)', size=13)
         return plt.plot(vpts, Fpts, label=leg)
-
-    
-# ********************************************************************************************************* # MOT
+# **************************************** # thermodyn
+class thermodyn():
+    """returns transition wavelength, frequency, natural linewitdh, and Isat"""
+    def __init__(self, matter):
+        #if iso ==162 or iso ==164: self.isoN = 'Dy'
+        #self.D_vdw = 281e-12
+        self.T_hlC, self.T_hlK, self.iso  = matter.T_hlC, matter.T_hlK, matter.iso
+        self.mass , self.beta , self.elem = matter.mass , matter.beta , matter.elem
+        self.v_mp = matter.v_mp 
+        ##
+    def get_P(self, *argv, **kwargs):
+        T = self.T_hlK
+        #print(bar, atm,  bar/atm)
+        #print(bar, mmHg, bar/mmHg)
+        #pm = np.array([+1, -1])
+        #a, b = np.array(35170+pm*160), np.array(20.56+pm*0.12)
+        #A, B = a.sum()/2, b.sum()/2
+        A, B = np.array(35170), np.array(20.56)
+        ln_P = - A/T + B
+        P    = np.exp(ln_P)
+        if argv:
+            tl_n = str(self.elem)+' vapor pressure as a function of temperature'
+            xl_n = r'${10^4/T}$ (K${^{-1}}$)'
+            yl_n = r'P (mmHg)'
+            if argv[0]=='sos': print("optional args:\nget_n('plt')\\\OR\\\get_n('plt', **{'tl':''})")
+            if argv[0]=='plt': 
+                d = {'xp':1e4/self.T_hlK, 'yp':P/mmHg, 'xl':xl_n, 'yl':yl_n, 'tl':tl_n}
+                if kwargs:
+                    d.update(kwargs)
+                plts_0log(**d)
+        return P
+    def get_n(self, *argv, **kwargs):
+        P = self.get_P()
+        n = P*self.beta
+        if argv:
+            tl_n = str(self.elem)+' density as a function of temperature'
+            xl_n = r'${T}$ ($^\circ$C)'
+            if argv[0]=='sos': print("optional args:\nget_n('plt')\\\OR\\\get_n('plt', **{'tl':''})")
+            if argv[0]=='plt': 
+                d = {'xp':self.T_hlK, 'yp':n, 'xl':xl_n, 'tl':tl_n}
+                if kwargs:
+                    d.update(kwargs)
+                plts_0lin(**d)
+        return n
+#############################################
+################# apparatus #################
+# ***************************************** # MOT
 class MOT():
     def __init__(self, light, matter, res):
         def detun(self):return light.detun * self.Gamma
@@ -133,8 +178,7 @@ class MOT():
         self.a_max, self.eta = self.opt.a_max, eta(self)
         self.F_max, self.T_d = self.opt.F_max, self.opt.T_d
         self.v_cap           = v_cap(self)
-        
-# ********************************************************************************************************* # ZS
+# ***************************************** # ZS
 class ZS():
     def __init__(self, light, matter, res):
         def detun(self):return light.detun * self.Gamma
@@ -169,8 +213,7 @@ class ZS():
     def plot_v(self, v_in, z_in, legd):
         plt.title('Zeeman slower', size=13), plt.xlabel(r'$z$ (m)', size=13), plt.ylabel(r'$v_z$ (m/s)', size=13)
         return plt.plot(z_in, v_in, '.', label=legd), plt.legend(fontsize=13)
-
-# ********************************************************************************************************* # Oven
+# ***************************************** # Oven
 class oven():
     """res:{'b' or 'r'}"""
     def __init__(self, light, matter, res):
@@ -194,7 +237,13 @@ class oven():
         
         self.a_max, self.eta = self.opt.a_max, eta(self)
         self.F_max, self.T_d = self.opt.F_max, self.opt.T_d
-        
+    def get_geometry(self, *argv, **kwargs):
+        ## input: ('', **{'test_zpt':100, 'zax':[0, 200, 20]})
+        if argv:
+            if argv[0]=='sos': ovenA('sos')
+            if argv[0]=='MQM'  : ovenA('', kwargs)
+            if argv[0]=='Innsb': ovenB('', kwargs)
+
     def __str__(self, *argv):
         if argv:
             if argv[0]   ==  'light': return(self.strLight)
@@ -207,11 +256,46 @@ class oven():
     def get_n(self, I_I0):
         j = self.D ## note
         return -1 * np.log(I_I0) / self.sigma0 / j
-
-
-
-#############################################################################################################
-################################################### plots ###################################################
-#############################################################################################################
-
-
+# ***************************************** # stats
+class stats():
+    def __init__(self, matter, **kwargs):
+        
+        self.m, self.iso = matter.mass,matter.iso
+        self.T, self.Tc  = matter.T_hlK, matter.T_hlC
+        
+        self.beta = 1/kB/self.T 
+        self.a0 = 1/np.sqrt(self.m*self.beta)
+        self.a1 = np.sqrt(2) * self.a0
+        
+    def get_vrand(self, *argv, npts=100000, v):
+        cdf, n = self.MB_CDF(v), npts
+        """create interpolation function to CDF '' essentially x = g(y) from y = f(x)"""
+        inv_cdf = interp(cdf, v)
+        """ generate a set of velocity vectors in 3D from the MB inverse CDF function """
+        speeds, theta, phi = ( inv_cdf(np.random.random(n)), 
+                               np.arccos(np.random.uniform(-1, 1, n)), np.random.uniform(0, 2*np.pi, n) )
+        vx, vy, vz         = ( speeds * np.sin(theta) * np.cos(phi), speeds * np.sin(theta) * np.sin(phi),
+                               speeds * np.cos(theta) )
+        if argv:
+            if argv[0]=='vx': return vx
+            if argv[0]=='vy': return vy
+            if argv[0]=='vz': return vz
+            if argv[0]=='vs': return speeds
+        else: return speeds, vx, vy, vz
+    def get_vsz(self, vs_max=1500):
+        vs, vz = np.arange(0 , vs_max), np.arange(-4*self.a1, 4*self.a1, self.a1/50)
+        return [vs, vz]
+    def MB_z(self, v): 
+        f_vz = np.exp(-v**2/self.a1**2)/np.sqrt(self.a1 * pi)
+        return f_vz/f_vz.sum()/(v[1]-v[0])
+    def MB_CDF(self, v):
+        """create CDF '' essentially y = f(x)"""
+        cdf = erf( v/self.a1 ) - np.sqrt(4/pi) * v * np.exp( -(v/self.a1)**2 )/self.a1
+        return cdf 
+    def MB_PDF(self, v):
+        pdf = 4*pi*( 1/(2*pi*self.a0**2) )**1.5 *  v**2 * np.exp(-v**2 /self.a0**2 / 2)
+        return pdf 
+    def __str__(self, *argv):
+        if argv:
+            if argv[0] == 'matter': return(self.strMatter)
+            elif argv[0]   ==  'light': return(self.strLight)
